@@ -27,6 +27,14 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+
+	"go.opentelemetry.io/otel"
+    "go.opentelemetry.io/otel/propagation"
+    "go.opentelemetry.io/otel/exporters/trace/jaeger"
+    "go.opentelemetry.io/otel/sdk/resource"
+    "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/exporters/trace/datadog"
+
 )
 
 var (
@@ -59,6 +67,24 @@ func init() {
 	// Port registered at https://github.com/prometheus/prometheus/wiki/Default-port-allocations
 	*prometheusx.ListenAddress = ":9348"
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
+}
+
+func initTrace() {
+	apiKey := "" //api key do datadog
+	serviceName := "prometheus-bigquery-exporter"
+	datadogEndpoint := "https://trace.agent.datadoghq.com"
+
+	exporter, err := datadog.New(datadog.WithAPIKey(apiKey), datadog.WithEndpoint(datadogEndpoint))
+    rtx.Must(err, "Failed to create Datadog exporter")
+
+	provider := trace.NewTracerProvider(
+        trace.WithBatcher(exporter),
+        trace.WithSampler(trace.AlwaysSample()), // ou escolha um sampler adequado
+        trace.WithResource(resource.NewWithAttributes(resource.SchemaURL, semconv.ServiceNameKey.String(serviceName))),
+    )
+
+	otel.SetTracerProvider(provider)
+    otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
 }
 
 // sleepUntilNext finds the nearest future time that is a multiple of the given
@@ -132,6 +158,8 @@ var newRunner = func(client *bigquery.Client) sql.QueryRunner {
 func main() {
 	flag.Parse()
 	rtx.Must(flagx.ArgsFromEnv(flag.CommandLine), "Could not get args from env")
+
+	initTrace()
 
 	srv := prometheusx.MustServeMetrics()
 	defer srv.Shutdown(mainCtx)
