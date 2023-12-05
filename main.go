@@ -35,6 +35,8 @@ import (
     "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/exporters/trace/datadog"
 
+	"github.com/joho/godotenv"
+
 )
 
 var (
@@ -70,7 +72,7 @@ func init() {
 }
 
 func initTrace() {
-	apiKey := "" //api key do datadog
+	apiKey := os.Getenv("DATADOG_API_KEY") //api key do datadog
 	serviceName := "prometheus-bigquery-exporter"
 	datadogEndpoint := "https://trace.agent.datadoghq.com"
 
@@ -112,10 +114,20 @@ func fileToQuery(filename string, vars map[string]string) string {
 }
 
 func reloadRegisterUpdate(client *bigquery.Client, files []setup.File, vars map[string]string, keepAlive bool) {
+
+    ctx, span := otel.Tracer("main").Start(mainCtx, "reloadRegisterUpdate")
+    defer span.End()
+
 	var wg sync.WaitGroup
 	for i := range files {
 		wg.Add(1)
 		go func(f *setup.File) {
+
+			defer wg.Done()
+
+			fileCtx, fileSpan := otel.Tracer("file").Start(ctx, "processFile")
+            defer fileSpan.End()
+
 			modified, err := f.IsModified()
 			start := time.Now()
 			if modified && err == nil {
@@ -144,7 +156,7 @@ func reloadRegisterUpdate(client *bigquery.Client, files []setup.File, vars map[
 				successFilesCounter.WithLabelValues(fileToMetric(f.Name)).Inc()
 				updateDuration.WithLabelValues(fileToMetric(f.Name), "success").Observe(time.Since(start).Seconds())
 			}
-			wg.Done()
+			//wg.Done()
 		}(&files[i])
 	}
 	wg.Wait()
@@ -156,6 +168,12 @@ var newRunner = func(client *bigquery.Client) sql.QueryRunner {
 }
 
 func main() {
+
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
+
 	flag.Parse()
 	rtx.Must(flagx.ArgsFromEnv(flag.CommandLine), "Could not get args from env")
 
