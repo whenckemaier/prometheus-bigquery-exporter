@@ -14,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"context"
+	"errors"
 
 	"github.com/m-lab/go/flagx"
 	"github.com/m-lab/go/prometheusx"
@@ -29,14 +31,21 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/stdout/stdoutmetric"
+	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
     "go.opentelemetry.io/otel/propagation"
-    "go.opentelemetry.io/otel/exporters/trace/jaeger"
+	"go.opentelemetry.io/otel/sdk/metric"
     "go.opentelemetry.io/otel/sdk/resource"
     "go.opentelemetry.io/otel/sdk/trace"
-	"go.opentelemetry.io/otel/exporters/trace/datadog"
+	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
+	
+	"github.com/opentracing/opentracing-go"
+
+	"gopkg.in/DataDog/dd-trace-go.v1/ddtrace/opentracer"
+    "gopkg.in/DataDog/dd-trace-go.v1/ddtrace/tracer"
+	
 
 	"github.com/joho/godotenv"
-
 )
 
 var (
